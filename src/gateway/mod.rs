@@ -49,8 +49,8 @@ use uuid::Uuid;
 
 /// Maximum request body size (64KB) — prevents memory exhaustion
 pub const MAX_BODY_SIZE: usize = 65_536;
-/// Request timeout (30s) — prevents slow-loris attacks
-pub const REQUEST_TIMEOUT_SECS: u64 = 30;
+/// Request timeout (120s) — allows for complex AI processing while preventing slow-loris attacks
+pub const REQUEST_TIMEOUT_SECS: u64 = 120;
 /// Sliding window used by gateway rate limiting.
 pub const RATE_LIMIT_WINDOW_SECS: u64 = 60;
 /// Fallback max distinct client keys tracked in gateway rate limiter.
@@ -872,11 +872,11 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/_app/{*path}", get(static_files::handle_static))
         // ── Config PUT with larger body limit ──
         .merge(config_put_router)
-        .with_state(state)
+        .with_state(state.clone())
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(REQUEST_TIMEOUT_SECS),
+            Duration::from_secs(config.gateway.request_timeout_secs),
         ))
         // ── SPA fallback: non-API GET requests serve index.html ──
         .fallback(get(static_files::handle_spa_fallback));
@@ -2895,8 +2895,8 @@ mod tests {
     }
 
     #[test]
-    fn security_timeout_is_30_seconds() {
-        assert_eq!(REQUEST_TIMEOUT_SECS, 30);
+    fn security_timeout_is_120_seconds() {
+        assert_eq!(REQUEST_TIMEOUT_SECS, 120);
     }
 
     #[test]

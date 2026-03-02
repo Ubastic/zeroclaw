@@ -1755,6 +1755,11 @@ pub struct GatewayConfig {
     /// Node-control protocol scaffold (`[gateway.node_control]`).
     #[serde(default)]
     pub node_control: NodeControlConfig,
+
+    /// Request timeout in seconds (default: 120).
+    /// Controls how long the gateway will wait for a request to complete before returning 408.
+    #[serde(default = "default_gateway_request_timeout_secs")]
+    pub request_timeout_secs: u64,
 }
 
 /// Node-control scaffold settings under `[gateway.node_control]`.
@@ -1801,6 +1806,10 @@ fn default_gateway_rate_limit_max_keys() -> usize {
 
 fn default_gateway_idempotency_max_keys() -> usize {
     10_000
+}
+
+fn default_gateway_request_timeout_secs() -> u64 {
+    120
 }
 
 fn default_true() -> bool {
