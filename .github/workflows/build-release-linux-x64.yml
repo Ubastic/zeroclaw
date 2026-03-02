@@ -1,0 +1,152 @@
+name: Build Release Linux x64
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (e.g., v0.1.7)"
+        required: true
+        type: string
+      draft:
+        description: "Create as draft release"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  CARGO_TERM_COLOR: always
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: core.hooksPath
+  GIT_CONFIG_VALUE_0: /dev/null
+
+jobs:
+  build-linux-x64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: |
+          cargo build --profile release-fast --locked --target x86_64-unknown-linux-gnu
+
+      - name: Check binary size
+        run: |
+          ls -lh target/x86_64-unknown-linux-gnu/release-fast/zeroclaw
+          size_bytes=$(stat -c%s target/x86_64-unknown-linux-gnu/release-fast/zeroclaw)
+          size_mb=$((size_bytes / 1024 / 1024))
+          echo "Binary size: ${size_mb}MB"
+          if [ $size_bytes -gt 20971520 ]; then
+            echo "::warning::Binary size (${size_mb}MB) exceeds 20MB"
+          fi
+
+      - name: Create archive
+        run: |
+          cd target/x86_64-unknown-linux-gnu/release-fast
+          tar -czf ../../../zeroclaw-x86_64-unknown-linux-gnu.tar.gz zeroclaw
+          cd ../../..
+          ls -lh zeroclaw-x86_64-unknown-linux-gnu.tar.gz
+
+      - name: Generate checksums
+        run: |
+          sha256sum zeroclaw-x86_64-unknown-linux-gnu.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Copy license files
+        run: |
+          cp LICENSE-APACHE LICENSE-APACHE.txt
+          cp LICENSE-MIT LICENSE-MIT.txt
+          cp NOTICE NOTICE.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeroclaw-linux-x64
+          path: |
+            zeroclaw-x86_64-unknown-linux-gnu.tar.gz
+            SHA256SUMS
+            LICENSE-APACHE.txt
+            LICENSE-MIT.txt
+            NOTICE.txt
+          retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-linux-x64
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zeroclaw-linux-x64
+
+      - name: Display artifacts
+        run: |
+          ls -lh
+          cat SHA256SUMS
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: Release ${{ github.event.inputs.release_tag || github.ref_name }}
+          draft: ${{ github.event.inputs.draft || 'true' }}
+          files: |
+            zeroclaw-x86_64-unknown-linux-gnu.tar.gz
+            SHA256SUMS
+            LICENSE-APACHE.txt
+            LICENSE-MIT.txt
+            NOTICE.txt
+          body: |
+            ## ZeroClaw ${{ github.event.inputs.release_tag || github.ref_name }}
+            
+            ### Linux x86_64 Release
+            
+            **Binary:** `zeroclaw-x86_64-unknown-linux-gnu.tar.gz`
+            
+            #### Installation
+            ```bash
+            # Download and extract
+            wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/zeroclaw-x86_64-unknown-linux-gnu.tar.gz
+            tar -xzf zeroclaw-x86_64-unknown-linux-gnu.tar.gz
+            
+            # Move to PATH
+            sudo mv zeroclaw /usr/local/bin/
+            
+            # Verify installation
+            zeroclaw --version
+            ```
+            
+            #### Checksums
+            SHA256 checksums are provided in the `SHA256SUMS` file for verification:
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```
+            
+            #### License
+            This project is dual-licensed under MIT OR Apache-2.0.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
