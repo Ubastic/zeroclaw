@@ -1831,6 +1831,7 @@ impl Default for GatewayConfig {
             idempotency_ttl_secs: default_idempotency_ttl_secs(),
             idempotency_max_keys: default_gateway_idempotency_max_keys(),
             node_control: NodeControlConfig::default(),
+            request_timeout_secs: default_gateway_request_timeout_secs(),
         }
     }
 }
