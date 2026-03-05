@@ -71,10 +71,12 @@ jobs:
       - name: Verify static linking
         run: |
           ldd target/x86_64-unknown-linux-musl/release-fast/zeroclaw || true
-          if ldd target/x86_64-unknown-linux-musl/release-fast/zeroclaw 2>&1 | grep -q "not a dynamic executable"; then
+          ldd_output=$(ldd target/x86_64-unknown-linux-musl/release-fast/zeroclaw 2>&1)
+          if echo "$ldd_output" | grep -qE "statically linked|not a dynamic executable"; then
             echo "✅ Binary is fully static (no GLIBC dependencies)"
           else
             echo "⚠️ Binary has dynamic dependencies"
+            echo "$ldd_output"
             exit 1
           fi
 
@@ -144,7 +146,7 @@ jobs:
             # Verify installation
             zeroclaw --version
             
-            # Verify static linking (should output: not a dynamic executable)
+            # Verify static linking (should output: statically linked)
             ldd /usr/local/bin/zeroclaw
             ```
             
